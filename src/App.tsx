@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Search, TrendingUp, Globe, MapPin, Loader2, ExternalLink, ChevronRight, AlertCircle } from 'lucide-react';
+import { Search, TrendingUp, Globe, MapPin, Loader2, ExternalLink, ChevronRight, AlertCircle, BookOpen, Plus, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import ReactMarkdown from 'react-markdown';
 import { getDailyMarketData, searchStock, type NewsItem, type StockRecommendation, type StockInfo } from './services/geminiService';
+
+interface Note {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: string;
+}
+
+const NOTES_STORAGE_KEY = 'stock-app-notes';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -21,6 +30,42 @@ export default function App() {
   } | null>(null);
   const [searchResult, setSearchResult] = useState<StockInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Notes state
+  const [notes, setNotes] = useState<Note[]>(() => {
+    try {
+      const stored = localStorage.getItem(NOTES_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [addingNote, setAddingNote] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(notes));
+  }, [notes]);
+
+  const handleAddNote = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!noteTitle.trim() && !noteContent.trim()) return;
+    const newNote: Note = {
+      id: crypto.randomUUID(),
+      title: noteTitle.trim(),
+      content: noteContent.trim(),
+      createdAt: new Date().toLocaleString('zh-TW'),
+    };
+    setNotes(prev => [newNote, ...prev]);
+    setNoteTitle('');
+    setNoteContent('');
+    setAddingNote(false);
+  };
+
+  const handleDeleteNote = (id: string) => {
+    setNotes(prev => prev.filter(n => n.id !== id));
+  };
 
   useEffect(() => {
     fetchInitialData();
@@ -237,6 +282,104 @@ export default function App() {
             </div>
           </section>
         </div>
+        {/* Notes Section */}
+        <section className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-yellow-500/10 rounded-lg">
+                <BookOpen className="w-5 h-5 text-yellow-500" />
+              </div>
+              <h2 className="text-2xl font-bold">我的記事</h2>
+            </div>
+            <button
+              onClick={() => setAddingNote(v => !v)}
+              className="flex items-center gap-2 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 text-yellow-400 rounded-full px-4 py-2 text-sm font-medium transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              新增記事
+            </button>
+          </div>
+
+          <AnimatePresence>
+            {addingNote && (
+              <motion.form
+                key="note-form"
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                onSubmit={handleAddNote}
+                className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4"
+              >
+                <input
+                  type="text"
+                  placeholder="標題（選填）"
+                  value={noteTitle}
+                  onChange={e => setNoteTitle(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500/50 placeholder:text-gray-500"
+                />
+                <textarea
+                  placeholder="記事內容..."
+                  value={noteContent}
+                  onChange={e => setNoteContent(e.target.value)}
+                  rows={4}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-yellow-500/50 placeholder:text-gray-500 resize-none"
+                />
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    className="bg-yellow-500 hover:bg-yellow-400 text-black font-semibold rounded-xl px-5 py-2 text-sm transition-all"
+                  >
+                    儲存
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAddingNote(false); setNoteTitle(''); setNoteContent(''); }}
+                    className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-5 py-2 text-sm transition-all"
+                  >
+                    取消
+                  </button>
+                </div>
+              </motion.form>
+            )}
+          </AnimatePresence>
+
+          {notes.length === 0 ? (
+            <p className="text-gray-500 text-sm text-center py-8">尚無記事，點擊「新增記事」開始記錄。</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence>
+                {notes.map(note => (
+                  <motion.div
+                    key={note.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="group bg-white/5 border border-white/10 rounded-2xl p-5 flex flex-col gap-2 hover:border-yellow-500/30 transition-all"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      {note.title ? (
+                        <h3 className="font-semibold text-gray-100 leading-snug">{note.title}</h3>
+                      ) : (
+                        <span className="text-gray-500 text-sm italic">無標題</span>
+                      )}
+                      <button
+                        onClick={() => handleDeleteNote(note.id)}
+                        className="text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                        aria-label="刪除記事"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {note.content && (
+                      <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                    )}
+                    <p className="text-xs text-gray-600 mt-auto pt-2">{note.createdAt}</p>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </section>
       </main>
 
       <footer className="border-t border-white/5 py-12 mt-20">
